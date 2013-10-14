@@ -365,6 +365,10 @@ void rtp_store_msg ( rtp_session_t* _session, rtp_msg_t* _msg )
     }
 
     pthread_mutex_unlock(&_session->_mutex);
+<<<<<<< HEAD
+=======
+    return;
+>>>>>>> upstream/master
 }
 
 int rtp_release_session_recv ( rtp_session_t* _session )
@@ -372,7 +376,11 @@ int rtp_release_session_recv ( rtp_session_t* _session )
     if ( !_session ){
         return FAILURE;
     }
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> upstream/master
     rtp_msg_t* _tmp,* _it;
 
     pthread_mutex_lock(&_session->_mutex);
@@ -402,7 +410,10 @@ rtp_msg_t* rtp_msg_new ( rtp_session_t* _session, const uint8_t* _data, uint32_t
     _retu->_header = rtp_build_header ( _session ); /* It allocates memory and all */
     _retu->_ext_header = _session->_ext_header;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/master
     uint32_t _total_lenght = _length + _retu->_header->_length;
 
     if ( _retu->_ext_header ) {
@@ -443,7 +454,10 @@ rtp_msg_t* rtp_msg_parse ( rtp_session_t* _session, const uint8_t* _data, uint32
     assert(_retu);
 
     _retu->_header = rtp_extract_header ( _data, _length ); /* It allocates memory and all */
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/master
     if ( !_retu->_header ){
         free(_retu);
         return NULL;
@@ -692,4 +706,7 @@ int rtp_set_prefix ( rtp_session_t* _session, uint8_t* _prefix, uint16_t _prefix
 
     return SUCCESS;
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/master

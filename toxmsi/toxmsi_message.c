@@ -1,9 +1,16 @@
+<<<<<<< HEAD
 #include "toxmsi_message.h"
 
+=======
+>>>>>>> upstream/master
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
+<<<<<<< HEAD
+=======
+#include "toxmsi_message.h"
+>>>>>>> upstream/master
 #include <stdlib.h>
 #include <string.h>
 #include "../toxrtp/toxrtp_helper.h"

@@ -7,6 +7,11 @@
 #include "../toxrtp/toxrtp_message.h"
 #include "../toxrtp/tests/test_helper.h"
 #include <assert.h>
+<<<<<<< HEAD
+=======
+#include <pthread.h>
+#include "AV_codec.h"
+>>>>>>> upstream/master
 
 /* Define client version */
 #define _USERAGENT "tox_phone-v.0.2.1"
@@ -32,6 +37,10 @@ typedef struct phone_s {
     int _tox_sock;
 
     pthread_t _medialoop_id;
+<<<<<<< HEAD
+=======
+    codec_state *cs;
+>>>>>>> upstream/master
 
     Networking_Core* _networking;
 } phone_t;

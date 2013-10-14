@@ -160,6 +160,10 @@ void msi_register_callback_recv_ending ( MCALLBACK )
 {
     msi_ending_callback = callback;
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/master
 void msi_register_callback_recv_error ( MCALLBACK )
 {
     msi_error_callback = callback;
@@ -186,6 +190,10 @@ void msi_register_callback_requ_timeout ( MCALLBACK )
 /*------------------------*/
 
 /* Function for receiving and parsing a message that will be used internally */
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/master
 msi_msg_t* receive_message ( msi_session_t* _session )
 {
     assert(_session);
@@ -646,7 +654,10 @@ int msi_answer ( msi_session_t* _session, call_type _call_type )
     msi_free_msg ( _msg_starting );
 
     _session->_call->_state = call_active;
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/master
     return 1;
 }
 int msi_cancel ( msi_session_t* _session )

@@ -70,6 +70,10 @@ typedef struct msi_header_user_agent_s { /* Defines the device of the participan
 
 } msi_header_user_agent_t;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/master
 typedef struct msi_header_call_id_s { /* Call id that is used to identify the call */
     HEADER_VALUES
 

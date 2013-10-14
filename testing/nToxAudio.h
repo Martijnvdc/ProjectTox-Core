@@ -1,6 +1,6 @@
-/*  LAN_discovery.h
+/* nTox.h
  *
- *  LAN discovery implementation.
+ *Textual frontend for Tox.
  *
  *  Copyright (C) 2013 Tox project All Rights Reserved.
  *
@@ -21,35 +21,35 @@
  *
  */
 
+#ifndef NTOX_H
+#define NTOX_H
 
-#ifndef LAN_DISCOVERY_H
-#define LAN_DISCOVERY_H
-
-
-#include "DHT.h"
-
-/* Used for get_broadcast(). */
-#ifdef __linux
-#include <sys/ioctl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ncurses.h>
+#include <curses.h>
+#include <ctype.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <linux/netdevice.h>
-#endif
+#include <sys/types.h>
+#include <netdb.h>
+#include "../core/Messenger.h"
+#include "../core/network.h"
 
-/* Interval in seconds between LAN discovery packet sending. */
-#define LAN_DISCOVERY_INTERVAL 60
+#define STRING_LENGTH 256
+#define HISTORY 50
+#define PUB_KEY_BYTES 32
 
-/* Send a LAN discovery pcaket to the broadcast address with port port. */
-int send_LANdiscovery(uint16_t port, Net_Crypto *c);
+void new_lines(char *line);
+void line_eval(char *line);
+void wrap(char output[STRING_LENGTH], char input[STRING_LENGTH], int line_width) ;
+int count_lines(char *string) ;
+char *appender(char *str, const char c);
+void do_refresh();
 
-/* Sets up packet handlers. */
-void LANdiscovery_init(DHT *dht);
 
-/* checks if a given IP isn't routable
- *
- *  return 0 if ip is a LAN ip.
- *  return -1 if it is not.
- */
-int LAN_ip(IP ip);
 
 
 #endif
