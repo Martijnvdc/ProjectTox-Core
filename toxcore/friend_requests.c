@@ -26,6 +26,7 @@
 #endif
 
 #include "friend_requests.h"
+#include "util.h"
 
 /* Try to send a friend request to peer with public_key.
  * data is the data in the request and length is the length.
@@ -95,6 +96,12 @@ void callback_friendrequest(Friend_Requests *fr, void (*function)(uint8_t *, uin
     fr->handle_friendrequest_isset = 1;
     fr->handle_friendrequest_userdata = userdata;
 }
+/* Set the function used to check if a friend request should be displayed to the user or not. */
+void set_filter_function(Friend_Requests *fr, int (*function)(uint8_t *, void *), void *userdata)
+{
+    fr->filter_function = function;
+    fr->filter_function_userdata = userdata;
+}
 
 /* Add to list of received friend requests. */
 static void addto_receivedlist(Friend_Requests *fr, uint8_t *client_id)
@@ -102,7 +109,7 @@ static void addto_receivedlist(Friend_Requests *fr, uint8_t *client_id)
     if (fr->received_requests_index >= MAX_RECEIVED_STORED)
         fr->received_requests_index = 0;
 
-    memcpy(fr->received_requests[fr->received_requests_index], client_id, crypto_box_PUBLICKEYBYTES);
+    id_copy(fr->received_requests[fr->received_requests_index], client_id);
     ++fr->received_requests_index;
 }
 
@@ -115,10 +122,9 @@ static int request_received(Friend_Requests *fr, uint8_t *client_id)
 {
     uint32_t i;
 
-    for (i = 0; i < MAX_RECEIVED_STORED; ++i) {
-        if (memcmp(fr->received_requests[i], client_id, crypto_box_PUBLICKEYBYTES) == 0)
+    for (i = 0; i < MAX_RECEIVED_STORED; ++i)
+        if (id_equal(fr->received_requests[i], client_id))
             return 1;
-    }
 
     return 0;
 }
@@ -140,6 +146,10 @@ static int friendreq_handlepacket(void *object, IP_Port source, uint8_t *source_
 
     if (memcmp(packet, &fr->nospam, sizeof(fr->nospam)) != 0)
         return 1;
+
+    if (fr->filter_function)
+        if ((*fr->filter_function)(source_pubkey, fr->filter_function_userdata) != 0)
+            return 1;
 
     addto_receivedlist(fr, source_pubkey);
     (*fr->handle_friendrequest)(source_pubkey, packet + 4, length - 4, fr->handle_friendrequest_userdata);

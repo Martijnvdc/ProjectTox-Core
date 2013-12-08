@@ -3,6 +3,23 @@
  *
  * This file is donated to the Tox Project.
  * Copyright 2013  plutooo
+ *
+ *  Copyright (C) 2013 Tox project All Rights Reserved.
+ *
+ *  This file is part of Tox.
+ *
+ *  Tox is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Tox is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -16,11 +33,6 @@
 
 #include "util.h"
 
-uint64_t now()
-{
-    return time(NULL);
-}
-
 uint64_t random_64b()
 {
     uint64_t r;
@@ -33,16 +45,39 @@ uint64_t random_64b()
     return r;
 }
 
-bool id_eq(uint8_t *dest, uint8_t *src)
+/* don't call into system billions of times for no reason */
+static uint64_t unix_time_value;
+
+void unix_time_update()
+{
+    unix_time_value = (uint64_t)time(NULL);
+}
+
+uint64_t unix_time()
+{
+    return unix_time_value;
+}
+
+int is_timeout(uint64_t timestamp, uint64_t timeout)
+{
+    return timestamp + timeout <= unix_time_value;
+}
+
+
+/* id functions */
+bool id_equal(uint8_t *dest, uint8_t *src)
 {
     return memcmp(dest, src, CLIENT_ID_SIZE) == 0;
 }
 
-void id_cpy(uint8_t *dest, uint8_t *src)
+uint32_t id_copy(uint8_t *dest, uint8_t *src)
 {
     memcpy(dest, src, CLIENT_ID_SIZE);
+    return CLIENT_ID_SIZE;
 }
 
+
+/* state load/save */
 int load_state(load_state_callback_func load_state_callback, void *outer,
                uint8_t *data, uint32_t length, uint16_t cookie_inner)
 {
@@ -104,11 +139,14 @@ void loginit(uint16_t port)
     if (logfile)
         fclose(logfile);
 
-    if (!starttime)
-        starttime = now();
+    if (!starttime) {
+        unix_time_update();
+        starttime = unix_time();
+    }
 
     struct tm *tm = localtime(&starttime);
 
+    /* "%F %T" might not be Windows compatible */
     if (strftime(logbuffer + 32, sizeof(logbuffer) - 32, "%F %T", tm))
         sprintf(logbuffer, "%u-%s.log", ntohs(port), logbuffer + 32);
     else
@@ -128,7 +166,7 @@ void loginit(uint16_t port)
 void loglog(char *text)
 {
     if (logfile) {
-        fprintf(logfile, "%4u %s", (uint32_t)(now() - starttime), text);
+        fprintf(logfile, "%4u %s", (uint32_t)(unix_time() - starttime), text);
         fflush(logfile);
 
         return;
@@ -139,7 +177,9 @@ void loglog(char *text)
     size_t len = strlen(text);
 
     if (!starttime) {
-        starttime = now();
+        unix_time_update();
+        starttime = unix_time();
+
         logbufferprelen = 1024 + len - (len % 1024);
         logbufferpredata = malloc(logbufferprelen);
         logbufferprehead = logbufferpredata;
@@ -149,7 +189,7 @@ void loglog(char *text)
     if (!logbufferpredata)
         return;
 
-    if (len + logbufferprehead - logbufferpredata + 16U < logbufferprelen) {
+    if (len + (logbufferprehead - logbufferpredata) + 16U < logbufferprelen) {
         size_t logpos = logbufferprehead - logbufferpredata;
         size_t lennew = logbufferprelen * 1.4;
         logbufferpredata = realloc(logbufferpredata, lennew);
@@ -157,7 +197,7 @@ void loglog(char *text)
         logbufferprelen = lennew;
     }
 
-    int written = sprintf(logbufferprehead, "%4u %s", (uint32_t)(now() - starttime), text);
+    int written = sprintf(logbufferprehead, "%4u %s", (uint32_t)(unix_time() - starttime), text);
     logbufferprehead += written;
 }
 

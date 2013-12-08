@@ -40,14 +40,23 @@
 #include <ws2tcpip.h>
 
 typedef unsigned int sock_t;
-typedef INT sa_family_t;
+/* sa_family_t is the sockaddr_in / sockaddr_in6 family field */
+typedef short sa_family_t;
 
 #ifndef IN6_ARE_ADDR_EQUAL
+#ifdef IN6_ADDR_EQUAL
+#define IN6_ARE_ADDR_EQUAL(a,b) IN6_ADDR_EQUAL(a,b)
+#else
 #define IN6_ARE_ADDR_EQUAL(a,b) \
-    ((((__const uint32_t *) (a))[0] == ((__const uint32_t *) (b))[0]) \
-  && (((__const uint32_t *) (a))[1] == ((__const uint32_t *) (b))[1]) \
-  && (((__const uint32_t *) (a))[2] == ((__const uint32_t *) (b))[2]) \
-  && (((__const uint32_t *) (a))[3] == ((__const uint32_t *) (b))[3]))
+   ((((__const uint32_t *) (a))[0] == ((__const uint32_t *) (b))[0]) \
+   && (((__const uint32_t *) (a))[1] == ((__const uint32_t *) (b))[1]) \
+   && (((__const uint32_t *) (a))[2] == ((__const uint32_t *) (b))[2]) \
+   && (((__const uint32_t *) (a))[3] == ((__const uint32_t *) (b))[3]))
+#endif
+#endif
+
+#ifndef EWOULDBLOCK
+#define EWOULDBLOCK WSAEWOULDBLOCK
 #endif
 
 #else // Linux includes
@@ -71,8 +80,13 @@ typedef int sock_t;
 #include <sodium.h>
 #else
 #include <crypto_box.h>
+#include <crypto_secretbox.h>
 #include <randombytes.h>
 #define crypto_box_MACBYTES (crypto_box_ZEROBYTES - crypto_box_BOXZEROBYTES)
+#endif
+
+#ifndef crypto_secretbox_MACBYTES
+#define crypto_secretbox_MACBYTES (crypto_secretbox_ZEROBYTES - crypto_secretbox_BOXZEROBYTES)
 #endif
 
 #ifndef IPV6_ADD_MEMBERSHIP
@@ -97,12 +111,8 @@ typedef int sock_t;
 #define NET_PACKET_GROUP_CHATS     48  /* Group chats packet ID. */
 
 #define TOX_PORTRANGE_FROM 33445
-#define TOX_PORTRANGE_TO   33455
+#define TOX_PORTRANGE_TO   33545
 #define TOX_PORT_DEFAULT   TOX_PORTRANGE_FROM
-
-/* Current time, unix format */
-#define unix_time() ((uint64_t)time(NULL))
-
 
 typedef union {
     uint8_t uint8[4];
@@ -119,12 +129,12 @@ typedef union {
 } IP6;
 
 typedef struct {
-    sa_family_t family;
+    uint16_t family;
     union {
         IP4 ip4;
         IP6 ip6;
     };
-} IPAny;
+} IP;
 
 typedef union {
     struct {
@@ -136,24 +146,12 @@ typedef union {
     uint8_t uint8[8];
 } IP4_Port;
 
-/* will replace IP_Port as soon as the complete infrastructure is in place
- * removed the unused union and padding also */
-typedef struct {
-    IPAny ip;
+typedef struct IP_Port {
+    IP ip;
     uint16_t port;
-} IPAny_Port;
+} IP_Port;
 
-/* #undef TOX_ENABLE_IPV6 */
-#define TOX_ENABLE_IPV6
-#ifdef TOX_ENABLE_IPV6
 #define TOX_ENABLE_IPV6_DEFAULT 1
-typedef IPAny IP;
-typedef IPAny_Port IP_Port;
-#else
-#define TOX_ENABLE_IPV6_DEFAULT 0
-typedef IP4 IP;
-typedef IP4_Port IP_Port;
-#endif
 
 /* ip_ntoa
  *   converts ip into a string
@@ -240,9 +238,9 @@ typedef struct {
 typedef struct {
     Packet_Handles packethandlers[256];
 
-    /* Our UDP socket. */
     sa_family_t family;
     uint16_t port;
+    /* Our UDP socket. */
     sock_t sock;
     uint64_t send_fail_eagain;
 } Networking_Core;

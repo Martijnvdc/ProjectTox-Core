@@ -26,72 +26,100 @@
 #endif
 
 #include "LAN_discovery.h"
+#include "util.h"
 
 #define MAX_INTERFACES 16
 
 #ifdef __linux
-#ifndef TOX_ENABLE_IPV6
-/* Send packet to all broadcast addresses
- *
- *  return higher than 0 on success.
- *  return 0 on error.
- *
- * TODO: Make this work with IPv6 and remove the #ifndef TOX_ENABLE_IPV6.
- */
-static uint32_t send_broadcasts(Networking_Core *net, uint16_t port, uint8_t *data, uint16_t length)
+
+static int     broadcast_count = -1;
+static IP_Port broadcast_ip_port[MAX_INTERFACES];
+
+static void fetch_broadcast_info(uint16_t port)
 {
     /* Not sure how many platforms this will run on,
      * so it's wrapped in __linux for now.
+     * Definitely won't work like this on Windows...
      */
-    struct sockaddr_in *sock_holder = NULL;
-    struct ifreq i_faces[MAX_INTERFACES];
-    struct ifconf ifconf;
-    int count = 0;
-    int sock = 0;
-    int i = 0;
+    broadcast_count = 0;
+    sock_t sock = 0;
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+        return;
 
     /* Configure ifconf for the ioctl call. */
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        return 1;
-    }
-
+    struct ifreq i_faces[MAX_INTERFACES];
     memset(i_faces, 0, sizeof(struct ifreq) * MAX_INTERFACES);
 
+    struct ifconf ifconf;
     ifconf.ifc_buf = (char *)i_faces;
     ifconf.ifc_len = sizeof(i_faces);
-    count = ifconf.ifc_len / sizeof(struct ifreq);
 
     if (ioctl(sock, SIOCGIFCONF, &ifconf) < 0) {
-        return 1;
+        close(sock);
+        return;
     }
 
+    /* ifconf.ifc_len is set by the ioctl() to the actual length used;
+     * on usage of the complete array the call should be repeated with
+     * a larger array, not done (640kB and 16 interfaces shall be
+     * enough, for everybody!)
+     */
+    int i, count = ifconf.ifc_len / sizeof(struct ifreq);
+
     for (i = 0; i < count; i++) {
-        if (ioctl(sock, SIOCGIFBRDADDR, &i_faces[i]) < 0) {
-            return 1;
-        }
+        /* there are interfaces with are incapable of broadcast */
+        if (ioctl(sock, SIOCGIFBRDADDR, &i_faces[i]) < 0)
+            continue;
 
-        /* Just to clarify where we're getting the values from. */
-        sock_holder = (struct sockaddr_in *)&i_faces[i].ifr_broadaddr;
+        /* moot check: only AF_INET returned (backwards compat.) */
+        if (i_faces[i].ifr_broadaddr.sa_family != AF_INET)
+            continue;
 
-        if (sock_holder != NULL) {
-            IP_Port ip_port = {{{{sock_holder->sin_addr.s_addr}}, port, 0}};
-            sendpacket(net, ip_port, data, 1 + crypto_box_PUBLICKEYBYTES);
-        }
+        struct sockaddr_in *sock4 = (struct sockaddr_in *)&i_faces[i].ifr_broadaddr;
+
+        if (broadcast_count >= MAX_INTERFACES)
+            return;
+
+        IP_Port *ip_port = &broadcast_ip_port[broadcast_count];
+        ip_port->ip.family = AF_INET;
+        ip_port->ip.ip4.in_addr = sock4->sin_addr;
+        ip_port->port = port;
+        broadcast_count++;
     }
 
     close(sock);
-    return 0;
 }
-#endif
-#endif
+
+/* Send packet to all IPv4 broadcast addresses
+ *
+ *  return 1 if sent to at least one broadcast target.
+ *  return 0 on failure to find any valid broadcast target.
+ */
+static uint32_t send_broadcasts(Networking_Core *net, uint16_t port, uint8_t *data, uint16_t length)
+{
+    /* fetch only once? on every packet? every X seconds?
+     * old: every packet, new: once */
+    if (broadcast_count < 0)
+        fetch_broadcast_info(port);
+
+    if (!broadcast_count)
+        return 0;
+
+    int i;
+
+    for (i = 0; i < broadcast_count; i++)
+        sendpacket(net, broadcast_ip_port[i], data, length);
+
+    return 1;
+}
+#endif /* __linux */
 
 /* Return the broadcast ip. */
 static IP broadcast_ip(sa_family_t family_socket, sa_family_t family_broadcast)
 {
     IP ip;
     ip_reset(&ip);
-
-#ifdef TOX_ENABLE_IPV6
 
     if (family_socket == AF_INET6) {
         if (family_broadcast == AF_INET6) {
@@ -116,14 +144,6 @@ static IP broadcast_ip(sa_family_t family_socket, sa_family_t family_broadcast)
         }
     }
 
-#else
-
-    if (family_socket == AF_INET)
-        if (family_broadcast == AF_INET)
-            ip.uint32 = INADDR_BROADCAST;
-
-#endif
-
     return ip;
 }
 
@@ -132,13 +152,8 @@ static IP broadcast_ip(sa_family_t family_socket, sa_family_t family_broadcast)
  */
 int LAN_ip(IP ip)
 {
-#ifdef TOX_ENABLE_IPV6
-
     if (ip.family == AF_INET) {
         IP4 ip4 = ip.ip4;
-#else
-    IP4 ip4 = ip;
-#endif
 
         /* Loopback. */
         if (ip4.uint8[0] == 127)
@@ -161,9 +176,13 @@ int LAN_ip(IP ip)
                 && ip4.uint8[2] != 255)
             return 0;
 
-#ifdef TOX_ENABLE_IPV6
-    } else if (ip.family == AF_INET6)
-    {
+        /* RFC 6598: 100.64.0.0 to 100.127.255.255 (100.64.0.0/10)
+         * (shared address space to stack another layer of NAT) */
+        if ((ip4.uint8[0] == 100) && ((ip4.uint8[1] & 0xC0) == 0x40))
+            return 0;
+
+    } else if (ip.family == AF_INET6) {
+
         /* autogenerated for each interface: FE80::* (up to FEBF::*)
            FF02::1 is - according to RFC 4291 - multicast all-nodes link-local */
         if (((ip.ip6.uint8[0] == 0xFF) && (ip.ip6.uint8[1] < 3) && (ip.ip6.uint8[15] == 1)) ||
@@ -177,9 +196,11 @@ int LAN_ip(IP ip)
             ip4.ip4.uint32 = ip.ip6.uint32[3];
             return LAN_ip(ip4);
         }
-    }
 
-#endif
+        /* localhost in IPv6 (::1) */
+        if (IN6_IS_ADDR_LOOPBACK(&ip.ip6.in6_addr))
+            return 0;
+    }
 
     return -1;
 }
@@ -203,18 +224,14 @@ int send_LANdiscovery(uint16_t port, Net_Crypto *c)
 {
     uint8_t data[crypto_box_PUBLICKEYBYTES + 1];
     data[0] = NET_PACKET_LAN_DISCOVERY;
-    memcpy(data + 1, c->self_public_key, crypto_box_PUBLICKEYBYTES);
+    id_copy(data + 1, c->self_public_key);
 
 #ifdef __linux
-#ifndef TOX_ENABLE_IPV6
     send_broadcasts(c->lossless_udp->net, port, data, 1 + crypto_box_PUBLICKEYBYTES);
-#endif
 #endif
     int res = -1;
     IP_Port ip_port;
     ip_port.port = port;
-
-#ifdef TOX_ENABLE_IPV6
 
     /* IPv6 multicast */
     if (c->lossless_udp->net->family == AF_INET6) {
@@ -227,9 +244,6 @@ int send_LANdiscovery(uint16_t port, Net_Crypto *c)
 
     /* IPv4 broadcast (has to be IPv4-in-IPv6 mapping if socket is AF_INET6 */
     ip_port.ip = broadcast_ip(c->lossless_udp->net->family, AF_INET);
-#else
-    ip_port.ip = broadcast_ip(AF_INET, AF_INET);
-#endif
 
     if (ip_isset(&ip_port.ip))
         if (sendpacket(c->lossless_udp->net, ip_port, data, 1 + crypto_box_PUBLICKEYBYTES))

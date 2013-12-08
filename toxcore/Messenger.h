@@ -52,6 +52,9 @@
 #define PACKET_ID_JOIN_GROUPCHAT 145
 #define PACKET_ID_ACCEPT_GROUPCHAT 146
 
+/* Max number of groups we can invite someone at the same time to. */
+#define MAX_INVITED_GROUPS 64
+
 /* Status definitions. */
 enum {
     NOFRIEND,
@@ -111,7 +114,8 @@ enum {
     FILESTATUS_PAUSED_BY_OTHER,
     FILESTATUS_TRANSFERRING,
     FILESTATUS_BROKEN,
-    FILESTATUS_PAUSED_BY_US
+    FILESTATUS_PAUSED_BY_US,
+    FILESTATUS_TEMPORARY
 };
 /* This cannot be bigger than 256 */
 #define MAX_CONCURRENT_FILE_PIPES 256
@@ -120,7 +124,8 @@ enum {
     FILECONTROL_ACCEPT,
     FILECONTROL_PAUSE,
     FILECONTROL_KILL,
-    FILECONTROL_FINISHED
+    FILECONTROL_FINISHED,
+    FILECONTROL_RESUME_BROKEN
 };
 
 typedef struct {
@@ -146,6 +151,8 @@ typedef struct {
     uint64_t ping_lastsent;
     struct File_Transfers file_sending[MAX_CONCURRENT_FILE_PIPES];
     struct File_Transfers file_receiving[MAX_CONCURRENT_FILE_PIPES];
+    int invited_groups[MAX_INVITED_GROUPS];
+    uint16_t invited_groups_num;
 } Friend;
 
 typedef struct Messenger {
@@ -191,6 +198,8 @@ typedef struct Messenger {
     void *group_invite_userdata;
     void (*group_message)(struct Messenger *m, int, int, uint8_t *, uint16_t, void *);
     void *group_message_userdata;
+    void (*group_namelistchange)(struct Messenger *m, int, int, uint8_t, void *);
+    void *group_namelistchange_userdata;
 
     void (*file_sendrequest)(struct Messenger *m, int, uint8_t, uint64_t, uint8_t *, uint16_t, void *);
     void *file_sendrequest_userdata;
@@ -448,6 +457,14 @@ void m_callback_group_invite(Messenger *m, void (*function)(Messenger *m, int, u
 void m_callback_group_message(Messenger *m, void (*function)(Messenger *m, int, int, uint8_t *, uint16_t, void *),
                               void *userdata);
 
+/* Set callback function for peer name list changes.
+ *
+ * It gets called every time the name list changes(new peer/name, deleted peer)
+ *  Function(Tox *tox, int groupnumber, void *userdata)
+ */
+void m_callback_group_namelistchange(Messenger *m, void (*function)(Messenger *m, int, int, uint8_t, void *),
+                                     void *userdata);
+
 /* Creates a new groupchat and puts it in the chats array.
  *
  * return group number on success.
@@ -489,6 +506,21 @@ int join_groupchat(Messenger *m, int friendnumber, uint8_t *friend_group_public_
  */
 
 int group_message_send(Messenger *m, int groupnumber, uint8_t *message, uint32_t length);
+
+/* Return the number of peers in the group chat on success.
+ * return -1 on failure
+ */
+int group_number_peers(Messenger *m, int groupnumber);
+
+/* List all the peers in the group chat.
+ *
+ * Copies the names of the peers to the name[length][MAX_NICK_BYTES] array.
+ *
+ * returns the number of peers on success.
+ *
+ * return -1 on failure.
+ */
+int group_names(Messenger *m, int groupnumber, uint8_t names[][MAX_NICK_BYTES], uint16_t length);
 
 /****************FILE SENDING*****************/
 
@@ -578,33 +610,33 @@ int m_msi_packet(Messenger *m, int friendnumber, uint8_t *data, uint16_t length)
  *  return allocated instance of Messenger on success.
  *  return 0 if there are problems.
  */
-Messenger *initMessenger(uint8_t ipv6enabled);
+Messenger *new_messenger(uint8_t ipv6enabled);
 
 /* Run this before closing shop
  * Free all datastructures.
  */
-void cleanupMessenger(Messenger *M);
+void kill_messenger(Messenger *M);
 
 /* The main loop that needs to be run at least 20 times per second. */
-void doMessenger(Messenger *m);
+void do_messenger(Messenger *m);
 
 /*
  * functions to avoid excessive polling
  */
-int waitprepareMessenger(Messenger *m, uint8_t *data, uint16_t *lenptr);
-int waitexecuteMessenger(Messenger *m, uint8_t *data, uint16_t len, uint16_t milliseconds);
-void waitcleanupMessenger(Messenger *m, uint8_t *data, uint16_t len);
+int wait_prepare_messenger(Messenger *m, uint8_t *data, uint16_t *lenptr);
+int wait_execute_messenger(Messenger *m, uint8_t *data, uint16_t len, uint16_t milliseconds);
+void wait_cleanup_messenger(Messenger *m, uint8_t *data, uint16_t len);
 
 /* SAVING AND LOADING FUNCTIONS: */
 
 /* return size of the messenger data (for saving). */
-uint32_t Messenger_size(Messenger *m);
+uint32_t messenger_size(Messenger *m);
 
 /* Save the messenger in data (must be allocated memory of size Messenger_size()) */
-void Messenger_save(Messenger *m, uint8_t *data);
+void messenger_save(Messenger *m, uint8_t *data);
 
 /* Load the messenger from data of size length. */
-int Messenger_load(Messenger *m, uint8_t *data, uint32_t length);
+int messenger_load(Messenger *m, uint8_t *data, uint32_t length);
 
 /* Return the number of friends in the instance m.
  * You should use this to determine how much memory to allocate
@@ -625,6 +657,18 @@ uint32_t copy_friendlist(Messenger *m, int *out_list, uint32_t list_size);
  * return -1 if failure.
  */
 int get_friendlist(Messenger *m, int **out_list, uint32_t *out_list_length);
+
+/* Return the number of chats in the instance m.
+ * You should use this to determine how much memory to allocate
+ * for copy_chatlist. */
+uint32_t count_chatlist(Messenger *m);
+
+/* Copy a list of valid chat IDs into the array out_list.
+ * If out_list is NULL, returns 0.
+ * Otherwise, returns the number of elements copied.
+ * If the array was too small, the contents
+ * of out_list will be truncated to list_size. */
+uint32_t copy_chatlist(Messenger *m, int *out_list, uint32_t list_size);
 
 #endif
 

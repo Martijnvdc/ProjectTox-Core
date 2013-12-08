@@ -2,6 +2,10 @@ TODO list.
 
 [IN PROGRESS] Add what is left to do to the TODO list.
 
+Networking:
+    [NOT STARTED] UPnP port forwarding.
+    [NOT STARTED] NAT-PMP port forwarding.
+
 DHT:
     [IN PROGRESS] Metadata collection prevention.
     [IN PROGRESS] Hardening against attacks.
@@ -11,9 +15,9 @@ Lossless UDP:
     [DONE] Increase data send/receive rates.
 
 [IN PROGRESS] Massive IRC like group chats (text only)
-    [DONE] networking base.
-    [TODO] Syncing chat state between clients (nicknames, list of who is in chat, etc...)
-    [TODO] Make clients sign their messages so that peers can't modify them.
+    [DONE] Networking base.
+    [NOT STARTED] Syncing chat state between clients (nicknames, list of who is in chat, etc...)
+    [NOT STARTED] Make clients sign their messages so that peers can't modify them.
 
 [IN PROGRESS] Audio/Video
     [DONE] Capture/encoding/streaming/decoding/displaying
@@ -23,9 +27,9 @@ Lossless UDP:
     [NOT STARTED] Push to talk for audio
 
 Friend_requests.c:
-    [TODO] What happens when a friend request is recieved needs to be changed.
+    [NOT STARTED] What happens when a friend request is recieved needs to be changed.
 
-[IN PROGRESS] File transfers
+[DONE] File transfers
 [NOT STARTED] Offline messaging
 [NOT STARTED] Friends list syncing
 [IN PROGRESS] IPV6 support
@@ -33,5 +37,5 @@ Friend_requests.c:
     [DONE] DHT + Messenger
     [NOT STARTED] Group chats
 
-[IN PROGRESS] GUI (https://github.com/nurupo/ProjectTox-Qt-GUI)
+[IN PROGRESS] GUI (no official GUI chosen yet)
 [NOT STARTED] Security audit from professionals
