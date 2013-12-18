@@ -31,23 +31,22 @@
 #include "tox.h"
 #include <pthread.h>
 
-#define MCBTYPE void
-#define MCBARGS void* _arg
-#define MCALLBACK MCBTYPE(*callback)(void* _arg)
-
-#define MSI_PACKET 69
-
-#define CT_AUDIO_HEADER_VALUE "AUDIO"
-#define CT_VIDEO_HEADER_VALUE "VIDEO"
+typedef void ( *msi_callback_t ) ( void* _arg );
 
 /* define size for call_id */
 #define _CALL_ID_LEN 12
 
+/**
+ * Call type identifier. Also used as rtp callback prefix.
+ */
 typedef enum {
-    type_audio = 1,
+    type_audio = 70,
     type_video,
 } call_type;
 
+/**
+ * Call state identifiers.
+ */
 typedef enum {
     call_inviting, /* when sending call invite */
     call_starting, /* when getting call invite */
@@ -56,31 +55,40 @@ typedef enum {
 
 } call_state;
 
-typedef int crypto_key;
-
 typedef struct msi_call_s {         /* Call info structure */
     call_state  _state;
     call_type   _type_local;
     call_type*  _type_peer;         /* Support for conference starts with this */
     uint8_t     _id[_CALL_ID_LEN];  /* Random value identifying the call */
-    crypto_key  _key;               /* What is the type again? */
-    uint16_t    _participants;      /* Number of participants */
-    uint32_t    _timeoutst;         /* Time of the timeout for some action to end; 0 if infinite */
-    int         _outgoing_timer_id; /* Timer id */
 
+    uint8_t*    _key_local;         /* The key for encryption */
+    uint8_t*    _key_peer;          /* The key for decryption */
+
+    uint8_t*    _nonce_local;       /* Local nonce */
+    uint8_t*    _nonce_peer;        /* Peer nonce  */
+
+    uint16_t    _participants;      /* Number of participants */
+
+    int         _ringing_tout_ms;   /* Ringing timeout in ms */
+
+    int         _request_timer_id;  /* Timer id for outgoing request/action */
+    int         _ringing_timer_id;  /* Timer id for ringing timeout */
+
+    pthread_mutex_t _mutex;         /* It's to be assumed that call will have
+                                     * seperate thread so add mutex
+                                     */
 } msi_call_t;
 
 typedef struct msi_session_s {
     pthread_mutex_t _mutex;
+    int _running;
 
-    crypto_key _key; /* The key */
-
-    /* Call information/handler. ( Maybe only information? ) */
-    msi_call_t* _call;
+    /* Call handler */
+    struct msi_call_s* _call;
 
     /* Storage for message receiving */
-    struct msi_msg_s* _oldest_msg;
-    struct msi_msg_s* _last_msg; /* tail */
+    struct msi_msg_s*  _oldest_msg;
+    struct msi_msg_s*  _last_msg; /* tail */
 
     /*int _friend_id;*/
     tox_IP_Port _friend_id;
@@ -90,54 +98,54 @@ typedef struct msi_session_s {
 
     const uint8_t* _user_agent;
 
-    void* _agent_handler;   /* Pointer to an object that is handling msi */
-    void* _core_handler;    /* Pointer to networking core or to anything that
-                             * should handle interaction with core/networking
-                             */
-    void* _event_handler;   /* Pointer to an object which handles the events */
+    void* _agent_handler; /* Pointer to an object that is handling msi */
+    void* _net_core;      /* Pointer to networking handler */
 
     uint32_t _frequ;
     uint32_t _call_timeout; /* Time of the timeout for some action to end; 0 if infinite */
+
 } msi_session_t;
 
-
-
-msi_session_t* msi_init_session ( void* _core_handler, const uint8_t* _user_agent );
+msi_session_t* msi_init_session ( void* _net_core, const uint8_t* _user_agent );
 int msi_terminate_session ( msi_session_t* _session );
-
-pthread_t msi_start_main_loop ( msi_session_t* _session, uint32_t _frequms );
 
 /* Registering callbacks */
 
-/*void msi_register_callback_send(int (*callback) ( int, uint8_t*, uint32_t ) );*/
-void msi_register_callback_send ( int ( *callback ) ( void* _core_handler, tox_IP_Port,  uint8_t*, uint32_t ) );
+void msi_register_callback_send ( int ( *callback ) ( void* _net_core, tox_IP_Port,  uint8_t*, uint32_t ) );
 
 /* Callbacks that handle the states */
-void msi_register_callback_call_started ( MCALLBACK );
-void msi_register_callback_call_canceled ( MCALLBACK );
-void msi_register_callback_call_rejected ( MCALLBACK );
-void msi_register_callback_call_ended ( MCALLBACK );
 
-void msi_register_callback_recv_invite ( MCALLBACK );
-void msi_register_callback_recv_ringing ( MCALLBACK );
-void msi_register_callback_recv_starting ( MCALLBACK );
-void msi_register_callback_recv_ending ( MCALLBACK );
-void msi_register_callback_recv_error ( MCALLBACK );
+typedef enum {
+    /* Requests */
+    cb_oninvite,
+    cb_onstart,
+    cb_oncancel,
+    cb_onreject,
+    cb_onend,
 
-void msi_register_callback_requ_timeout ( MCALLBACK );
+    /* Responses */
+    cb_ringing,
+    cb_starting,
+    cb_ending,
+
+    /* Protocol */
+    cb_error,
+    cb_timeout,
+
+} callbackid_t;
+
+void msi_register_callback(msi_callback_t _callback, callbackid_t _id);
 /* -------- */
 
-
-/* Function handling receiving from core */
-/*static int msi_handlepacket ( tox_IP_Port ip_port, uint8_t* _data, uint16_t _lenght ); */
-
-/* functions describing the usage of msi */
-int msi_invite ( msi_session_t* _session, call_type _call_type, uint32_t _timeoutms );
+/* action functions */
+int msi_invite ( msi_session_t* _session, call_type _call_type, uint32_t _rngsec );
 int msi_hangup ( msi_session_t* _session );
 
 int msi_answer ( msi_session_t* _session, call_type _call_type );
 int msi_cancel ( msi_session_t* _session );
 int msi_reject ( msi_session_t* _session );
+
+int msi_stopcall ( msi_session_t* _session );
 
 int  msi_send_msg ( msi_session_t* _session, struct msi_msg_s* _msg );
 void msi_store_msg ( msi_session_t* _session, struct msi_msg_s* _msg );
