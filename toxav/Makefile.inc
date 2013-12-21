@@ -3,12 +3,12 @@ if BUILD_AV
 lib_LTLIBRARIES += libtoxrtp.la
 
 libtoxrtp_la_include_HEADERS = \
-                        ../toxrtp/toxrtp.h
+                        ../toxav/toxrtp.h
 
 libtoxrtp_la_includedir = $(includedir)/tox
 
-libtoxrtp_la_SOURCES = ../toxrtp/toxrtp.h \
-                       ../toxrtp/toxrtp.c \
+libtoxrtp_la_SOURCES = ../toxav/toxrtp.h \
+                       ../toxav/toxrtp.c \
                        ../toxcore/network.h \
                        ../toxcore/network.c \
                        ../toxcore/util.h \
